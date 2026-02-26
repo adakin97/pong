@@ -9,7 +9,7 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
-    background: #ff69b4;
+    background: #0d1f0d;
     width: 100%;
     height: 100%;
     overflow: hidden;
@@ -246,18 +246,7 @@ function draw() {
   const pw = PADDLE_W();
   const bs = BALL_S();
 
-  ctx.fillStyle = '#ff69b4';
-  ctx.fillRect(0, 0, W, H);
-
-  // Centre line
-  ctx.setLineDash([10, 10]);
-  ctx.strokeStyle = '#222';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(W / 2, 0);
-  ctx.lineTo(W / 2, H);
-  ctx.stroke();
-  ctx.setLineDash([]);
+  drawCourt();
 
   // Player racket (handle left, head right)
   drawRacket(player.x, player.y, pw, ph, true);
@@ -269,7 +258,7 @@ function draw() {
   drawTennisBall(ball.x, ball.y, bs);
 
   // Labels
-  ctx.fillStyle = '#2a2a2a';
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
   ctx.font = `${Math.max(10, W * 0.014)}px Courier New`;
   ctx.textAlign = 'left';
   ctx.fillText('YOU', PAD_OFF(), H - 10);
@@ -285,6 +274,97 @@ function draw() {
   // Overlays
   if (state === 'start')  drawOverlay('PONG', 'Tap to Start');
   if (state === 'won')    drawOverlay(winner === 'YOU' ? 'YOU WIN' : 'CPU WINS', 'Tap to Play Again');
+}
+
+function drawCourt() {
+  // Surroundings (stands / out of bounds)
+  ctx.fillStyle = '#0d1f0d';
+  ctx.fillRect(0, 0, W, H);
+
+  // Court surface — two halves slightly different shade (classic hard court)
+  ctx.fillStyle = '#2e7d32';
+  ctx.fillRect(0, 0, W / 2, H);
+  ctx.fillStyle = '#388e3c';
+  ctx.fillRect(W / 2, 0, W / 2, H);
+
+  // Service box highlight (inner rectangles near net)
+  const svcW  = W * 0.22;
+  const svcT  = H * 0.18;
+  const svcB  = H * 0.82;
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  ctx.fillRect(W / 2 - svcW, svcT, svcW, svcB - svcT); // left service box
+  ctx.fillRect(W / 2,        svcT, svcW, svcB - svcT); // right service box
+
+  // White court lines
+  const lw = Math.max(1.5, W * 0.003);
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = lw;
+  ctx.setLineDash([]);
+
+  // Baselines
+  ctx.beginPath();
+  ctx.moveTo(PAD_OFF() + PADDLE_W() * 3, 0);
+  ctx.lineTo(PAD_OFF() + PADDLE_W() * 3, H);
+  ctx.moveTo(W - PAD_OFF() - PADDLE_W() * 3, 0);
+  ctx.lineTo(W - PAD_OFF() - PADDLE_W() * 3, H);
+  ctx.stroke();
+
+  // Singles sidelines (top & bottom edges)
+  ctx.beginPath();
+  ctx.moveTo(0, H * 0.06); ctx.lineTo(W, H * 0.06);
+  ctx.moveTo(0, H * 0.94); ctx.lineTo(W, H * 0.94);
+  ctx.stroke();
+
+  // Service lines
+  ctx.beginPath();
+  ctx.moveTo(W / 2 - svcW, svcT); ctx.lineTo(W / 2 - svcW, svcB);
+  ctx.moveTo(W / 2 + svcW, svcT); ctx.lineTo(W / 2 + svcW, svcB);
+  ctx.stroke();
+
+  // Centre service line (horizontal, between service boxes)
+  ctx.beginPath();
+  ctx.moveTo(W / 2 - svcW, H / 2); ctx.lineTo(W / 2 + svcW, H / 2);
+  ctx.stroke();
+
+  // Net
+  drawNet();
+}
+
+function drawNet() {
+  const netX  = W / 2;
+  const netT  = H * 0.04;
+  const netB  = H * 0.96;
+  const netW  = Math.max(4, W * 0.008);
+
+  // Net shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(netX - netW / 2 + 2, netT, netW, netB - netT);
+
+  // Net body
+  ctx.fillStyle = 'rgba(30,30,30,0.85)';
+  ctx.fillRect(netX - netW / 2, netT, netW, netB - netT);
+
+  // Mesh lines
+  ctx.strokeStyle = 'rgba(200,200,200,0.2)';
+  ctx.lineWidth = 0.7;
+  const meshStep = (netB - netT) / 14;
+  for (let y = netT; y <= netB; y += meshStep) {
+    ctx.beginPath();
+    ctx.moveTo(netX - netW / 2, y);
+    ctx.lineTo(netX + netW / 2, y);
+    ctx.stroke();
+  }
+
+  // Top tape (white band)
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fillRect(netX - netW / 2, netT, netW, Math.max(3, H * 0.008));
+
+  // Net posts
+  const postW = Math.max(4, W * 0.007);
+  const postH = Math.max(10, H * 0.04);
+  ctx.fillStyle = '#aaa';
+  ctx.fillRect(netX - netW / 2 - postW / 2, netT - postH * 0.3, postW, postH);
+  ctx.fillRect(netX - netW / 2 - postW / 2, netB - postH * 0.7, postW, postH);
 }
 
 function drawRacket(x, y, pw, ph, isPlayer) {
