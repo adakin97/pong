@@ -259,17 +259,14 @@ function draw() {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Player paddle (white)
-  ctx.fillStyle = '#fff';
-  rrect(player.x, player.y, pw, ph, 4);
+  // Player racket (handle left, head right)
+  drawRacket(player.x, player.y, pw, ph, true);
 
-  // AI paddle (red)
-  ctx.fillStyle = '#e55';
-  rrect(ai.x, ai.y, pw, ph, 4);
+  // AI racket (handle right, head left)
+  drawRacket(ai.x, ai.y, pw, ph, false);
 
-  // Ball
-  ctx.fillStyle = '#fff';
-  rrect(ball.x, ball.y, bs, bs, 2);
+  // Tennis ball
+  drawTennisBall(ball.x, ball.y, bs);
 
   // Labels
   ctx.fillStyle = '#2a2a2a';
@@ -288,6 +285,90 @@ function draw() {
   // Overlays
   if (state === 'start')  drawOverlay('PONG', 'Tap to Start');
   if (state === 'won')    drawOverlay(winner === 'YOU' ? 'YOU WIN' : 'CPU WINS', 'Tap to Play Again');
+}
+
+function drawRacket(x, y, pw, ph, isPlayer) {
+  const cx = x + pw / 2;
+  const cy = y + ph / 2;
+  const headRx = pw * 2.2;   // horizontal radius of oval head
+  const headRy = ph * 0.46;  // vertical radius of oval head
+  const handleLen = pw * 3.5;
+  const handleW   = Math.max(3, pw * 0.45);
+  const grip = pw * 1.2;     // darker grip portion
+
+  // Handle
+  const hx = isPlayer ? cx - headRx - handleLen : cx + headRx;
+  ctx.save();
+  // Shaft
+  ctx.fillStyle = '#c8a96e';
+  ctx.beginPath();
+  ctx.rect(hx, cy - handleW / 2, handleLen, handleW);
+  ctx.fill();
+  // Grip wrap (darker end)
+  ctx.fillStyle = '#7a5c2e';
+  const gripX = isPlayer ? hx : hx + handleLen - grip;
+  ctx.beginPath();
+  ctx.rect(gripX, cy - handleW / 2, grip, handleW);
+  ctx.fill();
+  ctx.restore();
+
+  // Racket head outline
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, headRx, headRy, 0, 0, Math.PI * 2);
+  ctx.fillStyle = isPlayer ? 'rgba(255,255,255,0.08)' : 'rgba(229,80,80,0.08)';
+  ctx.fill();
+  ctx.strokeStyle = isPlayer ? '#ffffff' : '#e55';
+  ctx.lineWidth = Math.max(2, pw * 0.3);
+  ctx.stroke();
+
+  // Strings (clipped to head)
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, headRx - 1, headRy - 1, 0, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.strokeStyle = isPlayer ? 'rgba(255,255,255,0.35)' : 'rgba(229,80,80,0.4)';
+  ctx.lineWidth = 0.8;
+  const hStep = headRy / 3.5;
+  for (let dy = -headRy; dy <= headRy; dy += hStep) {
+    ctx.beginPath();
+    ctx.moveTo(cx - headRx, cy + dy);
+    ctx.lineTo(cx + headRx, cy + dy);
+    ctx.stroke();
+  }
+  const vStep = headRx / 3.5;
+  for (let dx = -headRx; dx <= headRx; dx += vStep) {
+    ctx.beginPath();
+    ctx.moveTo(cx + dx, cy - headRy);
+    ctx.lineTo(cx + dx, cy + headRy);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawTennisBall(x, y, size) {
+  const r  = size * 0.9;
+  const cx = x + size / 2;
+  const cy = y + size / 2;
+
+  // Fuzzy glow
+  const glow = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, 0, cx, cy, r);
+  glow.addColorStop(0,   '#e8f53a');
+  glow.addColorStop(0.7, '#c5d400');
+  glow.addColorStop(1,   '#9aaa00');
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = glow;
+  ctx.fill();
+
+  // Seam curves
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+  ctx.lineWidth = Math.max(1, r * 0.18);
+  ctx.beginPath();
+  ctx.arc(cx - r * 0.25, cy, r * 0.65, -Math.PI * 0.55, Math.PI * 0.55);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx + r * 0.25, cy, r * 0.65, Math.PI * 0.45, Math.PI * 1.55);
+  ctx.stroke();
 }
 
 function rrect(x, y, w, h, r) {
