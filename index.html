@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen">
+<title>Pong</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: #111;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    touch-action: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Courier New', monospace;
+    color: #fff;
+  }
+  #scoreboard {
+    display: flex;
+    gap: 60px;
+    font-size: 42px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    letter-spacing: 4px;
+    flex-shrink: 0;
+  }
+  canvas {
+    display: block;
+    touch-action: none;
+  }
+  #hint {
+    margin-top: 10px;
+    font-size: 11px;
+    color: #444;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<div id="scoreboard">
+  <span id="scoreLeft">0</span>
+  <span id="scoreRight">0</span>
+</div>
+<canvas id="canvas"></canvas>
+<div id="hint">Drag left side to move · Tap to start</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// ── Responsive sizing ────────────────────────────────────────────────────────
+let W, H;
+function resize() {
+  const maxW = window.innerWidth;
+  const maxH = window.innerHeight - 80; // leave room for scoreboard + hint
+  // Maintain 16:10 landscape ratio
+  if (maxW / maxH > 1.6) {
+    H = maxH;
+    W = Math.floor(H * 1.6);
+  } else {
+    W = maxW;
+    H = Math.floor(W / 1.6);
+  }
+  canvas.width  = W;
+  canvas.height = H;
+}
+resize();
+window.addEventListener('resize', () => { resize(); });
+
+// ── Constants (proportional to canvas size) ──────────────────────────────────
+const PADDLE_W  = () => Math.max(10, W * 0.016);
+const PADDLE_H  = () => Math.max(50, H * 0.15);
+const BALL_S    = () => Math.max(8,  W * 0.014);
+const PAD_OFF   = () => W * 0.04;
+const P_SPEED   = () => H * 0.012;
+const AI_SPEED  = () => H * 0.009;
+const WIN_SCORE = 7;
+
+// ── State ────────────────────────────────────────────────────────────────────
+let state  = 'start';
+let winner = '';
+let player = { x: 0, y: 0, score: 0 };
+let ai     = { x: 0, y: 0, score: 0 };
+let ball   = { x: 0, y: 0, vx: 0, vy: 0 };
+let touchY = null; // raw touch Y on canvas
+
+function initPositions() {
+  player.x = PAD_OFF();
+  ai.x     = W - PAD_OFF() - PADDLE_W();
+  player.y = H / 2 - PADDLE_H() / 2;
+  ai.y     = H / 2 - PADDLE_H() / 2;
+}
+
+function launchBall(towardsPlayer) {
+  const speed = W * 0.007;
+  const angle = (Math.random() * 60 - 30) * Math.PI / 180;
+  ball.x  = W / 2;
+  ball.y  = H / 2;
+  ball.vx = (towardsPlayer ? -1 : 1) * speed * Math.cos(angle);
+  ball.vy = speed * Math.sin(angle);
+}
+
+function resetBall(scoredSide) {
+  ball.x = W / 2; ball.y = H / 2; ball.vx = 0; ball.vy = 0;
+  setTimeout(() => launchBall(scoredSide === 'right'), 900);
+}
+
+function startGame() {
+  player.score = 0;
+  ai.score     = 0;
+  document.getElementById('scoreLeft').textContent  = '0';
+  document.getElementById('scoreRight').textContent = '0';
+  initPositions();
+  state = 'playing';
+  launchBall(Math.random() < 0.5);
+}
+
+initPositions();
+
+// ── Touch controls ────────────────────────────────────────────────────────────
+function getTouchY(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleY = H / rect.height;
+  for (let t of e.changedTouches) {
+    // Only control paddle if touch is on the left half
+    const tx = (t.clientX - rect.left) * (W / rect.width);
+    if (tx < W / 2) {
+      return (t.clientY - rect.top) * scaleY;
+    }
+  }
+  return null;
+}
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (state === 'start' || state === 'won') { startGame(); return; }
+  const y = getTouchY(e);
+  if (y !== null) touchY = y;
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const y = getTouchY(e);
+  if (y !== null) touchY = y;
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  touchY = null;
+}, { passive: false });
+
+// ── Update ────────────────────────────────────────────────────────────────────
+function update() {
+  if (state !== 'playing') return;
+
+  const ph = PADDLE_H();
+  const pw = PADDLE_W();
+  const bs = BALL_S();
+
+  // Player paddle follows touch
+  if (touchY !== null) {
+    const target = touchY - ph / 2;
+    const diff   = target - player.y;
+    player.y += diff * 0.25;
+  }
+  player.y = Math.max(0, Math.min(H - ph, player.y));
+
+  // AI paddle
+  const aiCenter  = ai.y + ph / 2;
+  const aiDiff    = ball.y - aiCenter;
+  const aiMove    = Math.min(Math.abs(aiDiff), AI_SPEED()) * Math.sign(aiDiff);
+  ai.y += aiMove;
+  ai.y = Math.max(0, Math.min(H - ph, ai.y));
+
+  // Ball
+  ball.x += ball.vx;
+  ball.y += ball.vy;
+
+  // Wall bounce
+  if (ball.y <= 0)      { ball.y = 0;      ball.vy *= -1; }
+  if (ball.y + bs >= H) { ball.y = H - bs; ball.vy *= -1; }
+
+  const maxSpeed = W * 0.018;
+
+  // Player paddle hit
+  if (
+    ball.vx < 0 &&
+    ball.x <= player.x + pw &&
+    ball.x >= player.x &&
+    ball.y + bs >= player.y &&
+    ball.y <= player.y + ph
+  ) {
+    ball.x = player.x + pw;
+    const hit   = (ball.y + bs / 2 - player.y) / ph;
+    const angle = (hit - 0.5) * 120 * Math.PI / 180;
+    const speed = Math.min(Math.hypot(ball.vx, ball.vy) * 1.04, maxSpeed);
+    ball.vx =  speed * Math.cos(angle);
+    ball.vy =  speed * Math.sin(angle);
+  }
+
+  // AI paddle hit
+  if (
+    ball.vx > 0 &&
+    ball.x + bs >= ai.x &&
+    ball.x + bs <= ai.x + pw + 2 &&
+    ball.y + bs >= ai.y &&
+    ball.y <= ai.y + ph
+  ) {
+    ball.x = ai.x - bs;
+    const hit   = (ball.y + bs / 2 - ai.y) / ph;
+    const angle = (hit - 0.5) * 120 * Math.PI / 180;
+    const speed = Math.min(Math.hypot(ball.vx, ball.vy) * 1.04, maxSpeed);
+    ball.vx = -speed * Math.cos(angle);
+    ball.vy =  speed * Math.sin(angle);
+  }
+
+  // Score
+  if (ball.x + bs < 0) {
+    ai.score++;
+    document.getElementById('scoreRight').textContent = ai.score;
+    if (ai.score >= WIN_SCORE) { state = 'won'; winner = 'CPU'; return; }
+    resetBall('left');
+  }
+  if (ball.x > W) {
+    player.score++;
+    document.getElementById('scoreLeft').textContent = player.score;
+    if (player.score >= WIN_SCORE) { state = 'won'; winner = 'YOU'; return; }
+    resetBall('right');
+  }
+}
+
+// ── Draw ──────────────────────────────────────────────────────────────────────
+function draw() {
+  const ph = PADDLE_H();
+  const pw = PADDLE_W();
+  const bs = BALL_S();
+
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, W, H);
+
+  // Centre line
+  ctx.setLineDash([10, 10]);
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(W / 2, 0);
+  ctx.lineTo(W / 2, H);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Player paddle (white)
+  ctx.fillStyle = '#fff';
+  rrect(player.x, player.y, pw, ph, 4);
+
+  // AI paddle (red)
+  ctx.fillStyle = '#e55';
+  rrect(ai.x, ai.y, pw, ph, 4);
+
+  // Ball
+  ctx.fillStyle = '#fff';
+  rrect(ball.x, ball.y, bs, bs, 2);
+
+  // Labels
+  ctx.fillStyle = '#2a2a2a';
+  ctx.font = `${Math.max(10, W * 0.014)}px Courier New`;
+  ctx.textAlign = 'left';
+  ctx.fillText('YOU', PAD_OFF(), H - 10);
+  ctx.textAlign = 'right';
+  ctx.fillText('CPU', W - PAD_OFF(), H - 10);
+
+  // Touch zone indicator (subtle)
+  if (state === 'playing') {
+    ctx.fillStyle = 'rgba(255,255,255,0.02)';
+    ctx.fillRect(0, 0, W / 2, H);
+  }
+
+  // Overlays
+  if (state === 'start')  drawOverlay('PONG', 'Tap to Start');
+  if (state === 'won')    drawOverlay(winner === 'YOU' ? 'YOU WIN' : 'CPU WINS', 'Tap to Play Again');
+}
+
+function rrect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawOverlay(heading, sub) {
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff';
+  ctx.font = `bold ${Math.max(28, W * 0.06)}px Courier New`;
+  ctx.fillText(heading, W / 2, H / 2 - 16);
+  ctx.font = `${Math.max(12, W * 0.022)}px Courier New`;
+  ctx.fillStyle = '#777';
+  ctx.fillText(sub, W / 2, H / 2 + 24);
+}
+
+// ── Loop ──────────────────────────────────────────────────────────────────────
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
